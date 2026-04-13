@@ -1,0 +1,10 @@
+configfile: "config/config.yaml"
+
+include: "rules/common.smk"
+
+rule all:
+    input:
+        expand("results/fastq/raw/{sample}_{read}.fastq.gz.md5", 
+               sample=unit_table.index, read=["R1", "R2"]),
+
+include: "rules/input.smk"

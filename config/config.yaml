@@ -1,0 +1,21 @@
+samples: config/samples.tsv
+units: config/units.tsv
+
+# Optional steps to control
+processing:
+  trimming:
+    tool: fastp # TODO: add more trimming tools. Currently only fastp is supported.
+    skip: false # TODO: add trimming skip option. Currently trimming is always performed.
+
+params:
+  # seqtk:
+  #   sample:
+  #     n: 0.1
+  #     extra: "-s 100"
+  fastp:
+    adapters: null
+    # extra: "--qualified_quality_phred 15 --unqualified_percent_limit 25 --length_required 70 --n_base_limit 3 --compression 6"
+    # Disable all filtering and only perform statistics
+    extra: "--disable_adapter_trimming --disable_quality_filtering"
+    
+  

@@ -1,0 +1,5 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - hashdeep=4.4
