@@ -14,7 +14,7 @@ params:
   #     extra: "-s 100"
   fastp:
     adapters: null
-    # extra: "--qualified_quality_phred 15 --unqualified_percent_limit 25 --length_required 70 --n_base_limit 3 --compression 6"
+    # extra: "--detect_adapter_for_pe --qualified_quality_phred 15 --unqualified_percent_limit 25 --length_required 70 --n_base_limit 3 --compression 6"
     # Disable all filtering and only perform statistics
     extra: "--disable_adapter_trimming --disable_quality_filtering"
     

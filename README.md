@@ -1,12 +1,14 @@
 # FASTQ Stats Pipeline
 
-A Snakemake-based pipeline for organizing and verifying FASTQ sequencing data through symlinking and MD5 checksum generation.
+A Snakemake-based pipeline for organizing FASTQ sequencing data and performing comprehensive quality control analysis.
 
 ## Overview
 
 This pipeline processes raw FASTQ files by:
 1. Creating symlinks from source FASTQ files to a standardized directory structure
 2. Generating MD5 checksums for data integrity verification
+3. Running comprehensive quality control analysis using fastp
+4. Extracting and merging detailed QC metrics from fastp output
 
 The pipeline uses a modular Snakemake workflow with separate rule files for different processing stages.
 
@@ -23,12 +25,19 @@ fastq-stats/
 │   ├── rules/
 │   │   ├── common.smk    # Common utilities and data loading
 │   │   ├── input.smk     # Input file handling rules
-│   │   └── qc.smk        # Quality control rules (placeholder)
+│   │   └── qc.smk        # Quality control rules
+│   ├── scripts/
+│   │   ├── extract_fastp_stats.py   # Extract comprehensive fastp statistics
+│   │   └── merge_q20_q30.py       # Merge fastp statistics from multiple samples
 │   └── envs/
-│       └── hashdeep.yaml # Conda environment for MD5 generation
+│       ├── hashdeep.yaml   # Conda environment for MD5 generation
+│       ├── python.yaml     # Conda environment for Python scripts
+│       └── csvtk.yaml     # Conda environment for CSV manipulation
 └── results/
-    └── fastq/
-        └── raw/          # Output directory for symlinks and MD5 files
+    ├── {sample}/           # Per-sample directory
+    │   ├── reads/          # MD5 checksums
+    │   └── fastp/         # fastp QC output (JSON, HTML)
+    └── merged/            # Merged statistics across all samples
 ```
 
 ## Configuration
@@ -58,7 +67,7 @@ params:
 Example `units.tsv` format:
 ```
 sample  r1                              r2
-SAMP1   /path/to/SAMP1_R1.fastq.gz     /path/to/SAMP1_R2.fastq.gz
+SAMP1   /path/to/SAMP1_R1.fastq.gz     /path/to/SAMP2_R2.fastq.gz
 SAMP2   /path/to/SAMP2_R1.fastq.gz     /path/to/SAMP2_R2.fastq.gz
 ```
 
@@ -81,12 +90,8 @@ snakemake --use-conda --cores 8
 
 # Dry run to see what will be executed
 snakemake --use-conda --dry-run
-```
 
-### Clean Up
-
-```bash
-# Remove all generated files
+# Clean all generated files
 snakemake clean
 ```
 
@@ -101,7 +106,7 @@ snakemake clean
 
 1. **`link_fastq`**: Creates symlinks from source FASTQ files to standardized output paths
    - Input: R1 and R2 FASTQ files specified in units.tsv
-   - Output: Symlinks in `results/fastq/raw/{sample}_R1.fastq.gz` and `{sample}_R2.fastq.gz`
+   - Output: Symlinks in `results/{sample}/reads/{sample}_R1.fastq.gz` and `{sample}_R2.fastq.gz`
 
 2. **`md5_fastq`**: Generates MD5 checksums for FASTQ files
    - Input: FASTQ file
@@ -110,37 +115,97 @@ snakemake clean
 
 ### QC Rules (`rules/qc.smk`)
 
-Contains commented-out rules for future fastp quality control implementation.
+1. **`fastp_qc`**: Runs fastp quality control on raw FASTQ files
+   - Input: R1 and R2 FASTQ files
+   - Output: JSON and HTML reports in `results/{sample}/fastp/`
+   - Generates: Comprehensive quality metrics including Q20/Q30 rates, filtering stats, duplication, insert size
+
+2. **`extract_fastp_stats`**: Extracts comprehensive statistics from fastp JSON output
+   - Input: fastp JSON file
+   - Output: TSV file with 50+ quality metrics
+   - Metrics include: basic stats, quality metrics, filtering statistics, duplication, insert size, per-read breakdown
+
+3. **`merge_fastp_stats`**: Merges fastp statistics from all samples
+   - Input: Individual sample stats files
+   - Output: Consolidated table `results/merged/fastp_stats.tsv`
+
+4. **`fetch_total_bases_q20_q30`**: Extracts key metrics from merged statistics
+   - Input: Merged fastp stats
+   - Output: Simplified table with total bases, Q20, and Q30 metrics
 
 ## Output
 
-The pipeline generates:
+The pipeline generates a per-sample directory structure:
 
 ```
-results/fastq/raw/
-├── {sample}_R1.fastq.gz          # Symlink to R1 FASTQ
-├── {sample}_R1.fastq.gz.md5      # MD5 checksum for R1
-├── {sample}_R2.fastq.gz          # Symlink to R2 FASTQ
-└── {sample}_R2.fastq.gz.md5      # MD5 checksum for R2
+results/{sample}/
+├── reads/
+│   ├── {sample}_R1.fastq.gz.md5      # MD5 checksum for R1
+│   └── {sample}_R2.fastq.gz.md5      # MD5 checksum for R2
+└── fastp/
+    ├── {sample}.json                   # fastp JSON output
+    └── {sample}.html                   # fastp HTML report
 ```
+
+And merged results:
+
+```
+results/merged/
+├── fastp_stats.tsv                     # Comprehensive fastp statistics (50+ metrics)
+└── fastp_stats_q20_q30.tsv            # Simplified key metrics
+```
+
+### Comprehensive Fastp Statistics
+
+The `fastp_stats.tsv` file contains over 50 metrics including:
+
+#### Overall Statistics
+- Total reads and bases (before/after filtering)
+- Read length for R1 and R2
+- GC content
+- Q20 and Q30 rates
+
+#### Per-Read Statistics (R1 and R2 separately)
+- Total reads and bases
+- Q20 and Q30 base counts and rates
+- Mean quality scores
+- Mean GC content
+- Overrepresented sequences count
+
+#### Filtering Statistics
+- Passed filter reads
+- Low quality reads
+- Too many N reads
+- Too short/long reads
+- Overall filter rate percentage
+
+#### Additional Metrics
+- Duplication rate
+- Insert size distribution (peak, unknown)
+- Overall combined Q20/Q30 rates
 
 ## Environment
 
 The pipeline uses Conda environments for reproducibility:
 
 - **`hashdeep.yaml`**: Provides hashdeep 4.4 for MD5 checksum generation
+- **`python.yaml`**: Provides Python and pandas for statistics extraction
+- **`csvtk.yaml`**: Provides csvtk for CSV/TSV manipulation
 
-## Future Development
+## Scripts
 
-The pipeline includes placeholder code for:
-- FASTP-based quality control and trimming
-- QC summary generation and merging
-- Adapter trimming and quality filtering
+### `extract_fastp_stats.py`
 
-These features are currently commented out and can be enabled when needed.
+Extracts comprehensive statistics from fastp JSON output. Generates a TSV file with over 50 quality metrics including basic stats, quality metrics, filtering statistics, duplication rates, insert size metrics, and per-read breakdown.
+
+### `merge_q20_q30.py`
+
+Merges fastp statistics from multiple samples into a single consolidated table for downstream analysis and reporting.
 
 ## Notes
 
 - The pipeline creates symlinks rather than copying files to save disk space
 - MD5 checksums provide data integrity verification for downstream analysis
-- All paths in configuration files should be absolute or relative to the working directory
+- fastp is configured without adapter trimming or quality filtering to obtain raw statistics
+- All paths in configuration files should be absolute or relative to working directory
+- The pipeline assumes paired-end sequencing data with R1/R2 files
