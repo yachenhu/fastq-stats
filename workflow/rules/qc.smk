@@ -62,7 +62,8 @@ rule merge_fastp_stats:
     conda:
         "../envs/csvtk.yaml"
     shell:
-        "csvtk -t concat {input} -o {output}"
+        "csvtk -t concat {input} | "
+        "csvtk -t sort -k1 -o {output}"
 
 
 rule fetch_total_bases_q20_q30:
