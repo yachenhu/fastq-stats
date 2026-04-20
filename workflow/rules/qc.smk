@@ -16,8 +16,8 @@ rule fastp_qc:
     """
     input:
         sample=[
-            "results/{sample}/reads/{sample}_R1.fastq.gz",
-            "results/{sample}/reads/{sample}_R2.fastq.gz"
+            "results/{sample}/downsample/{sample}_R1.fastq.gz",
+            "results/{sample}/downsample/{sample}_R2.fastq.gz"
         ]
     output:
         json = "results/{sample}/fastp/{sample}.json",

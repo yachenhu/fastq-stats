@@ -7,8 +7,12 @@ rule all:
         # MD5 checksums for FASTQ files
         expand("results/{sample}/reads/{sample}_{read}.fastq.gz.md5",
                sample=unit_table.index, read=["R1", "R2"]),
+        # Downsampled FASTQ files and MD5 checksums
+        expand("results/{sample}/downsample/{sample}_{read}.fastq.gz.md5",
+               sample=unit_table.index, read=["R1", "R2"]),
         "results/merged/fastp_stats.tsv",
         "results/merged/fastp_stats_q20_q30.tsv"
 
 include: "rules/input.smk"
+include: "rules/downsample.smk"
 include: "rules/qc.smk"
