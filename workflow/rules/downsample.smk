@@ -19,8 +19,8 @@ rule downsample_fastq:
         f2 = "results/{sample}/downsample/{sample}_R2.fastq.gz"
     params:
         command="sample",
-        # Target size in GB (configurable, default 1-2 GB range)
-        n = lambda wildcards: str_to_random(wildcards.sample, 1.25, 2.0) * 1e9 / 150,
+        # Target size in GB (configurable, default 1.5-2.5 GB range)
+        n = lambda wildcards: int(str_to_random(wildcards.sample, 1.5, 2.0) * 1e9 / 150 / 2),
         # Seed for reproducible sampling
         extra = config["params"]["seqtk"]["sample"]
     threads:
