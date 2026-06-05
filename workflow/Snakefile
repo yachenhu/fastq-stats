@@ -1,18 +1,92 @@
+import hashlib
+import pandas as pd
+
 configfile: "config/config.yaml"
 
-include: "rules/common.smk"
+unit_table = pd.read_table(config["samples"], index_col=0)
+
 
 rule all:
     input:
-        # MD5 checksums for FASTQ files
-        expand("results/{sample}/reads/{sample}_{read}.fastq.gz.md5",
+        expand("processed_data/{sample}/{sample}_{read}.fastq.gz.md5",
                sample=unit_table.index, read=["R1", "R2"]),
-        # Downsampled FASTQ files and MD5 checksums
-        expand("results/{sample}/downsample/{sample}_{read}.fastq.gz.md5",
-               sample=unit_table.index, read=["R1", "R2"]),
-        "results/merged/fastp_stats.tsv",
-        "results/merged/fastp_stats_q20_q30.tsv"
+        "results/merged/qc.tsv",
 
-include: "rules/input.smk"
-include: "rules/downsample.smk"
-include: "rules/qc.smk"
+
+rule prepare_fastq:
+    input:
+        r1 = lambda wildcards: unit_table.loc[wildcards.sample, "r1"],
+        r2 = lambda wildcards: unit_table.loc[wildcards.sample, "r2"]
+    output:
+        r1 = "processed_data/{sample}/{sample}_R1.fastq.gz",
+        r2 = "processed_data/{sample}/{sample}_R2.fastq.gz"
+    params:
+        n = lambda wildcards: int(hashlib.md5(wildcards.sample.encode()).hexdigest(), 16) % 200000 + 5900000
+    conda:
+        "envs/seqtk.yaml"
+    shell:
+        "DIR=$(dirname {output.r1}) && mkdir -p $DIR && "
+        "S1=$(stat -c%s {input.r1:q}) && S2=$(stat -c%s {input.r2:q}) && "
+        "if [ $((S1 + S2)) -gt 1000000000 ]; then "
+        "  seqtk sample -s 100 {input.r1:q} {params.n} | pigz > {output.r1} && "
+        "  seqtk sample -s 100 {input.r2:q} {params.n} | pigz > {output.r2}; "
+        "else "
+        "  ln -sf {input.r1:q} {output.r1} && "
+        "  ln -sf {input.r2:q} {output.r2}; "
+        "fi"
+
+
+rule md5_fastq:
+    input:
+        "processed_data/{sample}/{sample}_{read}.fastq.gz"
+    output:
+        "processed_data/{sample}/{sample}_{read}.fastq.gz.md5"
+    threads: 8
+    conda:
+        "envs/hashdeep.yaml"
+    shell:
+        "hashdeep -j {threads} -c md5 -b {input} | "
+        "tail -1 | cut -d',' -f2-3 | sed 's/,/\\  /' "
+        ">{output}"
+
+
+rule fastp_qc:
+    input:
+        sample=[
+            "processed_data/{sample}/{sample}_R1.fastq.gz",
+            "processed_data/{sample}/{sample}_R2.fastq.gz"
+        ]
+    output:
+        json = "results/{sample}/fastp/{sample}.json",
+        html = "results/{sample}/fastp/{sample}.html"
+    params:
+        extra = config["fastp"]["extra"]
+    threads: 8
+    log:
+        "logs/fastp_qc/{sample}.log"
+    benchmark:
+        "benchmarks/fastp_qc/{sample}.txt"
+    wrapper:
+        "v4.3.0/bio/fastp"
+
+
+rule extract_fastp_stats:
+    input:
+        "results/{sample}/fastp/{sample}.json"
+    output:
+        temp("results/{sample}/fastp/{sample}.tsv")
+    conda:
+        "envs/python.yaml"
+    script:
+        "scripts/extract_fastp_stats.py"
+
+
+rule merge_fastp_stats:
+    input:
+        expand("results/{sample}/fastp/{sample}.tsv", sample=unit_table.index)
+    output:
+        "results/merged/qc.tsv"
+    conda:
+        "envs/python.yaml"
+    script:
+        "scripts/merge_fastp_stats.py"

@@ -4,90 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Pipeline Overview
 
-This is a minimal Snakemake pipeline for organizing and verifying FASTQ sequencing data. The pipeline creates symlinks from source FASTQ files to a standardized directory structure and generates MD5 checksums for data integrity verification.
+A Snakemake pipeline for paired-end FASTQ QC: symlinks source files, conditionally downsamples with seqtk (if total size > 1 GB, ~6M read pairs with per-sample randomization), and runs fastp to produce a comprehensive QC table (62 columns).
 
 ## Running the Pipeline
 
 ```bash
-# Run with conda environments and default core count
-snakemake --use-conda
-
-# Run with specific number of cores
-snakemake --use-conda --cores 8
-
-# Dry run to see what will be executed
-snakemake --use-conda --dry-run
-
-# Clean all generated files
-snakemake clean
+snakemake --use-conda --conda-prefix ~/.snakemake/conda --wrapper-prefix https://gitee.com/yachenhu/snakemake-wrappers/raw/ --cores 8
+snakemake --use-conda --dry-run          # show DAG
 ```
 
 ## Architecture
 
-### Modular Workflow Structure
+All rules are defined in a single `workflow/Snakefile`.
 
-The workflow uses Snakemake's `include` directive to modularize rules:
+- **`workflow/Snakefile`** — loads the samples table from config, defines all rules
+- **`workflow/scripts/extract_fastp_stats.py`** — extracts 62 comprehensive QC metrics per sample from fastp JSON
+- **`workflow/scripts/merge_fastp_stats.py`** — merges per-sample TSVs into the final QC table
+- **`workflow/envs/hashdeep.yaml`** — hashdeep 4.4 for MD5 checksums
+- **`workflow/envs/seqtk.yaml`** — seqtk 1.4 for downsampling
+- **`workflow/envs/python.yaml`** — Python 3.10 with pandas
 
-- **`workflow/Snakefile`**: Entry point that loads config and includes rule files
-- **`workflow/rules/common.smk`**: Defines shared utilities and loads pandas DataFrames
-- **`workflow/rules/input.smk`**: Handles input file processing (symlinking, MD5 generation)
-- **`workflow/rules/qc.smk`**: Placeholder for future quality control rules (currently commented out)
+### Rules
 
-### Data Loading Pattern
+1. `prepare_fastq` — symlinks source FASTQs to `processed_data/{sample}/`; if total size > 1 GB, downsamples with seqtk (n≈5.9M–6.1M per sample, derived from stable hash of sample name, seed=100)
+2. `md5_fastq` — MD5 checksums for the prepared FASTQs (hashdeep, 8 threads)
+3. `fastp_qc` — fastp with adapter trimming and quality filtering disabled (v4.3.0 wrapper)
+4. `extract_fastp_stats` — extracts 62 QC metrics per sample from fastp JSON
+5. `merge_fastp_stats` — merges per-sample TSVs into `results/merged/qc.tsv`
 
-The pipeline uses pandas to load TSV configuration files into DataFrames that are accessed by rules:
+### Configuration
 
-```python
-sample_table = pd.read_table(config["samples"], index_col=0)
-unit_table = pd.read_table(config["units"], index_col=0)
+**`config/config.yaml`**:
+```yaml
+samples: config/samples.tsv
+fastp:
+  extra: "--disable_adapter_trimming --disable_quality_filtering"
 ```
 
-The `unit_table` is indexed by sample name and contains `r1` and `r2` columns with FASTQ file paths.
-
-### Key Functions
-
-- **`get_fastqs(wildcards)`**: Returns `[r1_path, r2_path]` for a given sample from the unit_table
-
-### Configuration Format
-
-**`config/samples.tsv`**: Simple list of sample names with `sample_name` header.
-
-**`config/units.tsv`**: Tab-separated file with columns:
-- `sample_name`: Sample identifier (used as index)
-- `library_name`: Library identifier
-- `r1`: Path to R1 FASTQ file
-- `r2`: Path to R2 FASTQ file
-
-All paths should be absolute or relative to the working directory.
+**`config/samples.tsv`**: Tab-separated file with columns `sample_name`, `library_name`, `r1`, `r2`. Indexed by `sample_name`.
 
 ### Output Structure
 
-The pipeline generates symlinks and MD5 files in `results/fastq/raw/`:
-- `{sample}_R1.fastq.gz` → symlink to R1 FASTQ
-- `{sample}_R1.fastq.gz.md5` → MD5 checksum
-- `{sample}_R2.fastq.gz` → symlink to R2 FASTQ
-- `{sample}_R2.fastq.gz.md5` → MD5 checksum
-
-### Conda Environments
-
-- **`workflow/envs/hashdeep.yaml`**: Provides hashdeep 4.4 for MD5 checksum generation (uses 8 threads)
-
-### Current Implementation
-
-The pipeline currently implements:
-1. `link_fastq`: Creates symlinks from source FASTQ files to standardized output paths
-2. `md5_fastq`: Generates MD5 checksums using hashdeep with parallel processing
-
-### Future Development
-
-The `qc.smk` file contains commented-out rules for fastp-based quality control and trimming. These are not currently functional and would require:
-- Implementing `get_fastp_adapters()` and `get_fastp_params()` helper functions
-- Creating scripts directory with `parse_fastp_json.py`
-- Adding additional conda environments (e.g., `csvtk.yaml`)
-
-### Important Notes
-
-- The pipeline uses symlinks rather than copying files to save disk space
-- The `rule all` in `Snakefile` defines the final targets (MD5 files for all samples and reads)
-- Configuration is centralized in `config/config.yaml` with paths to TSV files
-- The workflow assumes paired-end sequencing data with R1/R2 files
+```
+processed_data/{sample}/{sample}_{R1,R2}.fastq.gz      # symlinks or downsampled FASTQs
+processed_data/{sample}/{sample}_{R1,R2}.fastq.gz.md5  # MD5 checksums
+results/{sample}/fastp/{sample}.json                    # fastp QC output
+results/{sample}/fastp/{sample}.html
+results/merged/qc.tsv                                   # final QC summary (62 columns)
+```
