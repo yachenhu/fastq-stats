@@ -16,7 +16,7 @@ A Snakemake pipeline for paired-end FASTQ QC: symlinks source files, conditional
 fastq-stats/
 ├── config/
 │   ├── config.yaml          # Pipeline configuration
-│   └── samples.tsv          # Sample table (sample, library, r1, r2)
+│   └── samples.tsv          # Sample table (sample_name, r1, r2)
 ├── workflow/
 │   ├── Snakefile            # All rules in one file
 │   ├── scripts/
@@ -45,9 +45,9 @@ fastp:
 Tab-separated, indexed by `sample_name`:
 
 ```
-sample_name  library_name  r1                            r2
-library-1    lib1          /path/to/sample_R1.fastq.gz   /path/to/sample_R2.fastq.gz
-6-L-9-SP     6L-9-SP       /path/to/sample_R1.fastq.gz   /path/to/sample_R2.fastq.gz
+sample_name  r1                                  r2
+sample-1     /path/to/sample-1_R1.fastq.gz   /path/to/sample-1_R2.fastq.gz
+sample-2     /path/to/sample-2_R1.fastq.gz   /path/to/sample-2_R2.fastq.gz
 ```
 
 ## Usage

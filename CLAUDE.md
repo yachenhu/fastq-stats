@@ -41,7 +41,7 @@ fastp:
   extra: "--disable_adapter_trimming --disable_quality_filtering"
 ```
 
-**`config/samples.tsv`**: Tab-separated file with columns `sample_name`, `library_name`, `r1`, `r2`. Indexed by `sample_name`.
+**`config/samples.tsv`**: Tab-separated file with columns `sample_name`, `r1`, `r2`. Indexed by `sample_name`.
 
 ### Output Structure
 
